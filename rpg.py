@@ -1,4 +1,7 @@
 import time
+import pickle
+import os
+
 
 class enemy:
     def __init__(self, name, health, maxAttack, defense):
@@ -10,8 +13,8 @@ class enemy:
     def takeDmg(self, dmg):
         self.health -= dmg
     def isAlive(self):
-        while (self.health > 0):
-            Game().activeCombat = True
+        return self.health > 0
+
 class Goblin(enemy):
     def __init__(self):
         super().__init__("Goblin", health=5, maxAttack=5, defense=2)
@@ -23,7 +26,7 @@ class Game:
             'forest': {'description': 'A dense, dark forest. Paths lead in every direction.', 'exits': {'n': 'clearing', 'e': 'cave', 's': 'cabin', 'w': 'village outskirts' }, 'items': [], 'actions':{}, 'lightLvl': .75},
             'village outskirts': {'description': 'You can see a nearby village roll into view just above the horizon.', 'exits': {'e': 'forest'}, 'items': [], 'actions':{}, 'lightLvl': 1},
             'clearing': {'description': 'A rather empty clearing in the forest. The trees are sparse with grass covering the earth. The sun shines brightly.', 'exits': {'s': 'forest'}, 'items': ['rock'], 'actions':{}, 'lightLvl': 1},
-            'cave': {'description': 'A damp cave with strange markings on the walls. \n\nThe light of the forest shines from the west.\n', 'exits': {'w': 'forest', 'e': 'shop'}, 'items': ['torch'], 'actions':{'read markings'}, 'lightLvl': .25, 'enemies': {'goblin'}},
+            'cave': {'description': 'A damp cave with strange markings on the walls. \n\nThe light of the forest shines from the west.\n', 'exits': {'w': 'forest', 'e': 'shop'}, 'items': ['torch'], 'actions':{'read markings'}, 'lightLvl': .25, 'enemies': [Goblin()]},
             'shop': {'description': 'A small shop run by a mysterious merchant.', 'exits': {'w': 'cave'}, 'items': [], 'shop': {'potion': 5, 'sword': 15, 'shield': 10}, 'actions':{}, 'lightLvl': 1}
         }
         self.current_room = 'cabin'
@@ -45,6 +48,27 @@ class Game:
         self.holdingWeapon = False
         self.activeCombat = False
 
+    #Combat
+    #Deal damage to enemy in a room; NOTE: enemy cannot attack back yet.
+    def dealdmg(self, enemy_name):
+        room_enemies = self.rooms[self.current_room].get("enemies", [])
+        for enemy in room_enemies:
+            if enemy.name.lower() == enemy_name.lower():
+                self.curEnemy = enemy
+                if self.curEnemy.isAlive():
+                    totalDMG = self.attack - self.curEnemy.defense
+                    totalDMG = max(totalDMG, 0)
+                    self.curEnemy.takeDmg(totalDMG)
+                    if self.curEnemy.health < 0: self.curEnemy.health = 0
+                    print(f"You attack {self.curEnemy.name} for {totalDMG}!")
+                    print(f"{self.curEnemy.name} has {self.curEnemy.health} health left!")
+                    if not self.curEnemy.isAlive():
+                        print(f"You defeated the {self.curEnemy.name}!")
+                else:
+                    print("The corpse is now cold.")
+                return
+        print(f"{enemy_name} is not here.")
+
     def combat(self):
         self.activeCombat = True
         while self.curEnemy.isAlive() and self.activeCombat and self.curEnemy in self.rooms[self.current_room]['enemies']:
@@ -54,10 +78,10 @@ class Game:
             self.health -= totalDmg
             print(f"{self.curEnemy.name} attacks you for {totalDmg}!")
             print(f"\nYou have {self.health} health left!")
-        
+    #END combat    
+    
 
     #Time
-
     def advance_time(self, minutes):
         self.minutes += minutes
         while self.minutes >= 60:
@@ -67,7 +91,7 @@ class Game:
 
     def format_time(self):
         return f"{self.hours:02}:{self.minutes:02}"
-
+    #END Time
 
     def show_room(self):
         if self.current_room == 'shop' and self.hours < 8:
@@ -86,7 +110,9 @@ class Game:
                 print(f"- {item} ({price} gold)")
             print("Type 'buy [item]' to purchase.")
         if 'enemies' in room:
-            print(f"You also see a {self.curEnemy.name}")
+            self.curEnemy = room['enemies'][0]
+            print(f"You also see a {self.curEnemy.name}!")
+
 
     #Interactions
     
@@ -147,9 +173,16 @@ class Game:
                 print("Not enough gold.")
         else:
             print("That item is not for sale here.")
+    def take(self, item):
+        if item in self.rooms[self.current_room]['items']:
+            self.rooms[self.current_room]['items'].remove(item)
+            self.inventory.append(item)
+            print(f"You picked up the {item}.")
+        else:
+            print("That item isn't here.")
+    #END interactions
 
-
-
+    #Misc Commands
     def move(self, direction):
         if direction in self.rooms[self.current_room]['exits']:
             next_room = self.rooms[self.current_room]['exits'][direction]
@@ -162,14 +195,6 @@ class Game:
         else:
             print("You can't go that way.")
 
-    def take(self, item):
-        if item in self.rooms[self.current_room]['items']:
-            self.rooms[self.current_room]['items'].remove(item)
-            self.inventory.append(item)
-            print(f"You picked up the {item}.")
-        else:
-            print("That item isn't here.")
-
     def show_inventory(self):
         print("Your inventory:", ", ".join(self.inventory) if self.inventory else "Empty")
         print(f"Gold: {self.gold}")
@@ -181,6 +206,23 @@ class Game:
         print(f"{'Defense:':<15} {self.defense:<10}")
         print(f"{'Attack:':<15} {self.attack:<10}")
         print("--------------------")
+
+    def save_game(self, filename='savegame.pkl'):
+        with open(filename, 'wb') as f:
+            pickle.dump(self.__dict__, f)
+        print("Game saved successfully.")
+
+    def load_game(self, filename='savegame.pkl'):
+        if os.path.exists(filename):
+            with open(filename, 'rb') as f:
+                self.__dict__ = pickle.load(f)
+            print("Game loaded successfully.")
+            self.show_room()
+        else:
+            print("No save file found.")
+
+    #END misc Commands
+
     def run(self):
         self.show_room()
         while True:
@@ -215,14 +257,25 @@ class Game:
                 print(f"Current time: {self.format_time()}")
             elif command[0] == 'stats':
                 self.stats()
-            elif command[0] == 'read':
+            elif command[0] == 'read' and len(command) > 1:
                 self.read(''.join(command[1]))
             elif command[0] == "test":
                 self.curEnemy = Goblin()
                 self.combat()
+            elif command[0] == 'attack' and len(command) > 1:
+                self.dealdmg(''.join(command[1]))
+            elif command [0] == 'save':
+                self.save_game()
+            elif command [0] == 'load':
+                self.load_game()
             elif command[0] == 'quit':
                 print("Thanks for playing!\n")
                 break
+            elif command[0] == 'clear':
+                os.system('cls')
+                self.show_room()
+            elif command[0] == 'help':
+                print("This is an unhelpful list!")
             else:
                 print("Invalid command. Type 'help' for options.")
 
