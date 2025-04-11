@@ -3,6 +3,7 @@ import pickle
 import os
 
 
+
 class enemy:
     def __init__(self, name, health, maxAttack, defense):
         self.name = name
@@ -14,10 +15,28 @@ class enemy:
         self.health -= dmg
     def isAlive(self):
         return self.health > 0
+class weapon:
+    def __init__(self, name, damage):
+        self.name = name
+        self.damage = damage
+class armor:
+    def __init__(self, name, defense):
+        self.name = name 
+        self.defense = defense
+
+class LongSword(weapon):
+    def __init__(self):
+        super().__init__("Long Sword", damage=10)
+class SteelPlate(armor):
+    def __init__(self):
+        super().__init__("Steel Plate", defense=10)
 
 class Goblin(enemy):
     def __init__(self):
         super().__init__("Goblin", health=5, maxAttack=5, defense=2)
+class Rat(enemy):
+    def __init__(self):
+        super().__init__("Rat", health=2, maxAttack=1, defense=1)
 
 class Game:
     def __init__(self):
@@ -25,22 +44,34 @@ class Game:
             'cabin': {'description': 'A small wooden cabin with a flickering lantern.', 'exits': {'n': 'forest'}, 'items': ['map'], 'actions':{}, 'lightLvl': 1},
             'forest': {'description': 'A dense, dark forest. Paths lead in every direction.', 'exits': {'n': 'clearing', 'e': 'cave', 's': 'cabin', 'w': 'village outskirts' }, 'items': [], 'actions':{}, 'lightLvl': .75},
             'village outskirts': {'description': 'You can see a nearby village roll into view just above the horizon.', 'exits': {'e': 'forest'}, 'items': [], 'actions':{}, 'lightLvl': 1},
-            'clearing': {'description': 'A rather empty clearing in the forest. The trees are sparse with grass covering the earth. The sun shines brightly.', 'exits': {'s': 'forest'}, 'items': ['rock'], 'actions':{}, 'lightLvl': 1},
+            'clearing': {'description': 'A rather empty clearing in the forest. The trees are sparse with grass covering the earth. The sun shines brightly.', 'exits': {'s': 'forest'}, 'items': ['rock'], 'actions':{}, 'lightLvl': 1, "enemies": [Rat()]},
             'cave': {'description': 'A damp cave with strange markings on the walls. \n\nThe light of the forest shines from the west.\n', 'exits': {'w': 'forest', 'e': 'shop'}, 'items': ['torch'], 'actions':{'read markings'}, 'lightLvl': .25, 'enemies': [Goblin()]},
-            'shop': {'description': 'A small shop run by a mysterious merchant.', 'exits': {'w': 'cave'}, 'items': [], 'shop': {'potion': 5, 'sword': 15, 'shield': 10}, 'actions':{}, 'lightLvl': 1}
+            'shop': {'description': 'A small shop run by a mysterious merchant.', 'exits': {'w': 'cave'}, 'items': [], 'shop': {'potion': 5, "Long Sword": 15, "Steel Plate": 10}, 'actions':{}, 'lightLvl': 1}
         }
         self.current_room = 'cabin'
         self.inventory = []
         self.lightLvl = 1
-        self.gold = 10
+        self.gold = 100
         self.hours = 6
         self.minutes = 0
+        self.maxHealth = 50
         self.health = 100
         self.attack = 5
         self.defense = 2
 
+        self.itemList = {
+            'potion': {'item': 'potion', 'price': 5},
+            'longsword': {'item': LongSword(), 'price': 15},
+            'steelplate': {'item': SteelPlate(), 'price': 10}
+        }
+
         if 'enemies' in self.rooms[self.current_room]:
             self.curEnemy = self.rooms[self.current_room]['enemies']
+        if self.health > self.maxHealth: self.health = self.maxHealth
+
+        #Inventory Varibles
+        self.curWeapon = None
+        self.curArmor = None
 
         #Misc Varibles
         self.holdingTorch = False
@@ -64,12 +95,16 @@ class Game:
                     print(f"{self.curEnemy.name} has {self.curEnemy.health} health left!")
                     if not self.curEnemy.isAlive():
                         print(f"You defeated the {self.curEnemy.name}!")
+                        if not self.curEnemy.name.startswith("Dead "):
+                            self.curEnemy.name = (f"Dead {self.curEnemy.name}")
                 else:
                     print("The corpse is now cold.")
                 return
+        if enemy_name.startswith("Dead"):
+            print("They're already dead you nutjob.")
         print(f"{enemy_name} is not here.")
 
-    def combat(self):
+    def takeDMG(self):
         self.activeCombat = True
         while self.curEnemy.isAlive() and self.activeCombat and self.curEnemy in self.rooms[self.current_room]['enemies']:
             time.sleep(3)
@@ -82,7 +117,7 @@ class Game:
     
 
     #Time
-    def advance_time(self, minutes):
+    def advance_time(self, minutes): #advance time WITHOUT regaining hp, add random enemy spawns
         self.minutes += minutes
         while self.minutes >= 60:
             self.minutes -= 60
@@ -91,6 +126,16 @@ class Game:
 
     def format_time(self):
         return f"{self.hours:02}:{self.minutes:02}"
+
+    def rest(self, minutes): #rest to pass time and recover hp, add random enemy spawns
+        self.minutes += minutes
+        self.health = self.minutes // 10
+        while self.minutes >= 60:
+            self.minutes -= 60
+            self.hours += 1
+        print(f"Current time: {self.format_time()}")   
+        print(f"Health: {self.health}")
+
     #END Time
 
     def show_room(self):
@@ -102,8 +147,6 @@ class Game:
         room = self.rooms[self.current_room]
         print(f"\n{room['description']}")
         print("Exits:", ", ".join(room['exits'].keys()))
-        if room.get('items'):
-            print("Items here:", ", ".join(room['items']))
         if 'shop' in room and self.hours >= 8:
             print("Shop Items:")
             for item, price in room['shop'].items():
@@ -124,55 +167,91 @@ class Game:
         else:
             print("There's nothing to read here.")
 
-    def use(self, item):
-        if item in self.inventory:
-            if item == 'potion':
-                self.health = min(100, self.health + 20)
-                self.inventory.remove(item)
-                print("You drank a potion and restored 20 HP!")
-            elif item == 'torch':
-                if self.holdingTorch == False:
-                    print("The torch lights up the dark surroundings.")
-                    self.lightLvl = 1
-                    self.holdingTorch = True
-                    print(self.lightLvl)
-                elif self.holdingTorch == True:
-                    print("You snuff out the flame of your torch onto the ground.")
-                    self.lightLvl = self.rooms[self.current_room]['lightLvl']
-                    self.holdingTorch = False
+    def use(self, item_name):
+
+        
+        for item in self.inventory:
+            if isinstance(item, str) and item == item_name:
+                if item == 'potion':
+                    self.health = min(100, self.health + 20)
                     self.inventory.remove(item)
-                    print(self.lightLvl)
-            elif item == 'shield':
-                self.holdingShield = 1
-                self.defense += 10
-                print(f"You equipped your {item}!")
-            elif item == 'sword':
-                self.holdingWeapon = 1
-                self.attack += 5
-                print(f"You equipped your {item}!")
-            else:
-                print("Nothing happens.")
+                    print("You drank a potion and restored 20 HP!")
+                elif item == 'torch':
+                    if not self.holdingTorch:
+                        print("The torch lights up the dark surroundings.")
+                        self.lightLvl = 1
+                        self.holdingTorch = True
+                        print(self.lightLvl)
+                    else:
+                        print("You snuff out the flame of your torch onto the ground.")
+                        self.lightLvl = self.rooms[self.current_room]['lightLvl']
+                        self.holdingTorch = False
+                        self.inventory.remove(item)
+                        print(self.lightLvl)
+                else:
+                    print("Nothing happens.")
+                return
+
+            elif isinstance(item, weapon) and item_name == item.name.lower():
+                if not self.holdingWeapon:
+                    self.attack += item.damage
+                    self.curWeapon = item
+                    self.holdingWeapon = True
+                    print(f"You equipped your {item.name}!")
+                else:
+                    self.defense -= item.damage
+                    self.curWeapon = None
+                    self.holdingWeapon = False
+                    print(f"You unequipped your {item.name}!")
+
+                return
+
+            elif isinstance(item, armor) and item_name == item.name.lower():
+                if not self.holdingShield:
+                    self.defense += item.defense
+                    self.curArmor = item
+                    self.holdingShield = True
+                    print(f"You equipped your {item.name}!")
+                else:
+                    self.defense -= item.defense
+                    self.curArmor = None
+                    self.holdingShield = False
+                    print(f"You're already wearing armor.")
+                return
         else:
             print("You don't have that item.")
 
+
     def buy(self, item):
         room = self.rooms[self.current_room]
+        item = item.lower().replace(" ", "")  # Remove spaces and convert to lowercase
+
         if self.current_room != 'shop':
             print("You're not in a shop.")
             return
         if self.hours < 8:
             print("The shop is closed. Come back at 8:00 or later.")
             return
-        if item in room['shop']:
-            cost = room['shop'][item]
-            if self.gold >= cost:
-                self.gold -= cost
-                self.inventory.append(item)
-                print(f"You bought a {item} for {cost} gold.")
-            else:
-                print("Not enough gold.")
+        for shop_item_name in room['shop']:
+            if item == shop_item_name.lower().replace(" ", ""):
+                cost = room['shop'][shop_item_name]
+                if self.gold >= cost:
+                    self.gold -= cost
+
+                    key = shop_item_name.lower().replace(" ", "")
+                    if key in self.itemList:
+                        self.inventory.append(self.itemList[key]['item'])
+                        print(f"You bought a {shop_item_name} for {cost} gold.")
+                    else:
+                        self.inventory.append(shop_item_name)
+                        print(f"You bought a {shop_item_name} for {cost} gold.")
+                else:
+                    print("Not enough gold.")
+                return
         else:
             print("That item is not for sale here.")
+            print(item)
+
     def take(self, item):
         if item in self.rooms[self.current_room]['items']:
             self.rooms[self.current_room]['items'].remove(item)
@@ -196,7 +275,10 @@ class Game:
             print("You can't go that way.")
 
     def show_inventory(self):
-        print("Your inventory:", ", ".join(self.inventory) if self.inventory else "Empty")
+        print("Your inventory:", ", ".join(
+        item.name if hasattr(item, 'name') else str(item)
+        for item in self.inventory
+        ) if self.inventory else "Empty")        
         print(f"Gold: {self.gold}")
 
 
@@ -220,6 +302,13 @@ class Game:
             self.show_room()
         else:
             print("No save file found.")
+    
+    def search(self): #search the current room
+        room = self.rooms[self.current_room]
+        if room.get('items'):
+            print("You find:", ", ".join(room['items']))
+        else:
+            print("You find nothing.")
 
     #END misc Commands
 
@@ -236,9 +325,11 @@ class Game:
             elif command[0] == 'inventory':
                 self.show_inventory()
             elif command[0] == 'buy' and len(command) > 1:
-                self.buy(command[1])
+                item_name = " ".join(command[1:]).lower()
+                self.buy(item_name)
             elif command[0] == 'use' and len(command) > 1:
-                self.use(command[1])
+                item_name = " ".join(command[1:]).lower()  #join all words into the item name
+                self.use(item_name)
             elif command[0] == 'wait':
                 if len(command) == 1:
                     self.advance_time(30)
@@ -261,13 +352,21 @@ class Game:
                 self.read(''.join(command[1]))
             elif command[0] == "test":
                 self.curEnemy = Goblin()
-                self.combat()
+                self.takeDMG()
             elif command[0] == 'attack' and len(command) > 1:
                 self.dealdmg(''.join(command[1]))
             elif command [0] == 'save':
                 self.save_game()
             elif command [0] == 'load':
                 self.load_game()
+            elif command [0] == 'search':
+                self.search()
+            elif command[0] == 'rest' and len(command) > 1:
+                wait_time = int(command[1])
+                if wait_time > 0:
+                    self.rest(wait_time)
+                else:
+                     print("You can't wait for a negative amount of time!")
             elif command[0] == 'quit':
                 print("Thanks for playing!\n")
                 break
@@ -282,8 +381,9 @@ class Game:
     def menu(self):
         print("Welcome to the RPG! Type 'help' for commands.\n")
         input('Press Enter to Begin. \n>')
+        os.system('cls')
         self.run()
 
-
+Game().health = Game().maxHealth
 if __name__ == "__main__":
     Game().menu()
