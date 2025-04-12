@@ -13,6 +13,9 @@ class enemy:
 
     def takeDmg(self, dmg):
         self.health -= dmg
+        if self.health < 0: 
+            self.health = 0
+
     def isAlive(self):
         return self.health > 0
 class weapon:
@@ -41,11 +44,12 @@ class Rat(enemy):
 class Game:
     def __init__(self):
         self.rooms = {
-            'cabin': {'description': 'A small wooden cabin with a flickering lantern.', 'exits': {'n': 'forest'}, 'items': ['map'], 'actions':{}, 'lightLvl': 1},
+            'cabin': {'description': 'A small wooden cabin with a flickering lantern.', 'exits': {'n': 'forest'}, 'items': ['map', 'cigar'], 'actions':{}, 'lightLvl': 1},
             'forest': {'description': 'A dense, dark forest. Paths lead in every direction.', 'exits': {'n': 'clearing', 'e': 'cave', 's': 'cabin', 'w': 'village outskirts' }, 'items': [], 'actions':{}, 'lightLvl': .75},
             'village outskirts': {'description': 'You can see a nearby village roll into view just above the horizon.', 'exits': {'e': 'forest'}, 'items': [], 'actions':{}, 'lightLvl': 1},
             'clearing': {'description': 'A rather empty clearing in the forest. The trees are sparse with grass covering the earth. The sun shines brightly.', 'exits': {'s': 'forest'}, 'items': ['rock'], 'actions':{}, 'lightLvl': 1, "enemies": [Rat()]},
-            'cave': {'description': 'A damp cave with strange markings on the walls. \n\nThe light of the forest shines from the west.\n', 'exits': {'w': 'forest', 'e': 'shop'}, 'items': ['torch'], 'actions':{'read markings'}, 'lightLvl': .25, 'enemies': [Goblin()]},
+            'cave': {'description': 'A damp cave with strange markings on the walls. \n\nThe light of the forest shines from the west.\n', 'exits': {'n': 'dungeon landing', 'w': 'forest', 'e': 'shop'}, 'items': ['torch'], 'actions':{'read markings'}, 'lightLvl': .25, 'enemies': [Goblin(), Rat()]},
+            'dungeon landing': {'description': 'The floor is wet beneath your feet and the walls almost seem to excrete mold. \n\nThere is a slight breeze that makes your skin crawl. \n\nThe only ways out are forward or backwards.\n', 'exits': {'s': 'cave'}, 'items': [''], 'actions':{}, 'lightLvl': .25, "enemies": [Rat()]},
             'shop': {'description': 'A small shop run by a mysterious merchant.', 'exits': {'w': 'cave'}, 'items': [], 'shop': {'potion': 5, "Long Sword": 15, "Steel Plate": 10}, 'actions':{}, 'lightLvl': 1}
         }
         self.current_room = 'cabin'
@@ -64,6 +68,9 @@ class Game:
             'longsword': {'item': LongSword(), 'price': 15},
             'steelplate': {'item': SteelPlate(), 'price': 10}
         }
+        self.abilityList = {
+            'fireball': {'type': 'fire', 'damage': 5, 'cd': 3, 'unlocked': True}
+        }
 
         if 'enemies' in self.rooms[self.current_room]:
             self.curEnemy = self.rooms[self.current_room]['enemies']
@@ -81,6 +88,50 @@ class Game:
 
     #Combat
     #Deal damage to enemy in a room; NOTE: enemy cannot attack back yet.
+
+    def turnbasedCombat():
+        pass
+
+    def cast(self, abilityName, enemyName):
+        ability = self.abilityList.get(abilityName.lower())
+        if not ability:
+            print(f"You don't know any ability called '{abilityName}'.")
+            return
+        if ability['unlocked'] == False:
+            print(f"You haven't learned {abilityName} yet!")
+            return
+
+        room_enemies = self.rooms[self.current_room].get("enemies", [])
+        for enemy in room_enemies:
+            if enemy.name.lower() == enemyName.lower():
+                if not enemy.isAlive():
+                    print(f"{enemy.name} is already dead.")
+                    return
+
+                damage = ability['damage'] - enemy.defense
+                damage = max(damage, 0)
+                enemy.takeDmg(damage)
+                print(f"You use {abilityName.title()} on {enemy.name} for {damage} damage!")
+                print(f"{enemy.name} has {enemy.health} health left.")
+                self.statusEffects(ability['type'], enemy, ability['cd'])
+                
+                if not enemy.isAlive():
+                    print(f"You defeated the {enemy.name}!")
+                    enemy.name = f"Dead {enemy.name}"
+                return
+        print(f"No enemy named '{enemyName}' here.")
+
+    def statusEffects(self, type, target, cd):
+        timer = 0
+        while cd:
+            if timer >= cd: break
+            if target.health <= 0: break
+            if type == 'fire':
+                time.sleep(3)
+                target.takeDmg(1)
+                timer +=1
+                print(f"Enemy Health remaining: {self.curEnemy.health}")
+
     def dealdmg(self, enemy_name):
         room_enemies = self.rooms[self.current_room].get("enemies", [])
         for enemy in room_enemies:
@@ -153,8 +204,11 @@ class Game:
                 print(f"- {item} ({price} gold)")
             print("Type 'buy [item]' to purchase.")
         if 'enemies' in room:
+            room_enemies = room['enemies']
+            if room_enemies:
+                enemy_names = [enemy.name for enemy in room_enemies]
+                print(f"You also see: {', '.join(enemy_names)}.")
             self.curEnemy = room['enemies'][0]
-            print(f"You also see a {self.curEnemy.name}!")
 
 
     #Interactions
@@ -168,8 +222,6 @@ class Game:
             print("There's nothing to read here.")
 
     def use(self, item_name):
-
-        
         for item in self.inventory:
             if isinstance(item, str) and item == item_name:
                 if item == 'potion':
@@ -289,6 +341,14 @@ class Game:
         print(f"{'Attack:':<15} {self.attack:<10}")
         print("--------------------")
 
+    def spellList(self):
+        for spell_name, spell_info in self.abilityList.items():
+            known = spell_info.get('unlocked')
+            if known:
+                damage = spell_info.get('damage', 0)
+                spell_type = spell_info.get('type', 'Unknown')
+                print(f"- {spell_name.title()} (Type: {spell_type}, Damage: {damage})")
+
     def save_game(self, filename='savegame.pkl'):
         with open(filename, 'wb') as f:
             pickle.dump(self.__dict__, f)
@@ -348,13 +408,20 @@ class Game:
                 print(f"Current time: {self.format_time()}")
             elif command[0] == 'stats':
                 self.stats()
+            elif command[0] == 'spells':
+                self.spellList()
             elif command[0] == 'read' and len(command) > 1:
                 self.read(''.join(command[1]))
             elif command[0] == "test":
                 self.curEnemy = Goblin()
                 self.takeDMG()
             elif command[0] == 'attack' and len(command) > 1:
-                self.dealdmg(''.join(command[1]))
+                if command[1] == 'dead':
+                    print("The corpse has gone cold.")
+                else:
+                    self.dealdmg(''.join(command[1]))
+            elif command[0] == 'cast' and len(command) > 1:
+                self.cast(command[1], command[2])
             elif command [0] == 'save':
                 self.save_game()
             elif command [0] == 'load':
@@ -379,7 +446,7 @@ class Game:
                 print("Invalid command. Type 'help' for options.")
 
     def menu(self):
-        print("Welcome to the RPG! Type 'help' for commands.\n")
+        print("Welcome to the Adventure! Type 'help' for commands at any time.\n")
         input('Press Enter to Begin. \n>')
         os.system('cls')
         self.run()
