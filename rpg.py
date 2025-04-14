@@ -1,7 +1,7 @@
 import time
 import pickle
 import os
-
+import random
 
 
 class enemy:
@@ -36,7 +36,7 @@ class SteelPlate(armor):
 
 class Goblin(enemy):
     def __init__(self):
-        super().__init__("Goblin", health=5, maxAttack=5, defense=2)
+        super().__init__("Goblin", health=50, maxAttack=5, defense=2)
 class Rat(enemy):
     def __init__(self):
         super().__init__("Rat", health=2, maxAttack=1, defense=1)
@@ -69,7 +69,7 @@ class Game:
             'steelplate': {'item': SteelPlate(), 'price': 10}
         }
         self.abilityList = {
-            'fireball': {'type': 'fire', 'damage': 5, 'cd': 3, 'unlocked': True}
+            'fireball': {'type': 'fire', 'damage': 5, 'cd': 3, 'unlocked': True, 'description': ' bursts into flames!'}
         }
 
         if 'enemies' in self.rooms[self.current_room]:
@@ -93,6 +93,7 @@ class Game:
         pass
 
     def cast(self, abilityName, enemyName):
+        statuseffectChance = random.randint(1,10)
         ability = self.abilityList.get(abilityName.lower())
         if not ability:
             print(f"You don't know any ability called '{abilityName}'.")
@@ -113,7 +114,11 @@ class Game:
                 enemy.takeDmg(damage)
                 print(f"You use {abilityName.title()} on {enemy.name} for {damage} damage!")
                 print(f"{enemy.name} has {enemy.health} health left.")
-                self.statusEffects(ability['type'], enemy, ability['cd'])
+                if statuseffectChance > 6: 
+                    print(f"{enemy.name}{ability['description']}")
+                    self.statusEffects(ability['type'], enemy, ability['cd'])
+                else:
+                    print("Not engulfed")
                 
                 if not enemy.isAlive():
                     print(f"You defeated the {enemy.name}!")
@@ -122,15 +127,20 @@ class Game:
         print(f"No enemy named '{enemyName}' here.")
 
     def statusEffects(self, type, target, cd):
+        endChance = random.randint(1,10)
         timer = 0
         while cd:
             if timer >= cd: break
             if target.health <= 0: break
             if type == 'fire':
+                burnDmg = random.randint(1,5)
+                if endChance > 7: 
+                    print("The flame fizzles out.")
+                    break
                 time.sleep(3)
-                target.takeDmg(1)
+                target.takeDmg(burnDmg)
                 timer +=1
-                print(f"Enemy Health remaining: {self.curEnemy.health}")
+                print(f"{target.name} continues to burn! Enemy health remaining: {self.curEnemy.health}")
 
     def dealdmg(self, enemy_name):
         room_enemies = self.rooms[self.current_room].get("enemies", [])
@@ -158,12 +168,14 @@ class Game:
     def takeDMG(self):
         self.activeCombat = True
         while self.curEnemy.isAlive() and self.activeCombat and self.curEnemy in self.rooms[self.current_room]['enemies']:
+            if self.health <= 0: break
             time.sleep(3)
-            totalDmg = self.curEnemy.maxAttack
-            totalDmg -= self.defense
+            totalDmg = self.curEnemy.maxAttack - self.defense
             self.health -= totalDmg
             print(f"{self.curEnemy.name} attacks you for {totalDmg}!")
             print(f"\nYou have {self.health} health left!")
+    def kill(self, target): #continuously attack until taget is dead
+        pass
     #END combat    
     
 
@@ -419,9 +431,11 @@ class Game:
                 if command[1] == 'dead':
                     print("The corpse has gone cold.")
                 else:
-                    self.dealdmg(''.join(command[1]))
+                    self.dealdmg(command[1])
             elif command[0] == 'cast' and len(command) > 1:
                 self.cast(command[1], command[2])
+            elif command[0] == 'kill' and len(command) > 1:
+                self.kill(command[1])
             elif command [0] == 'save':
                 self.save_game()
             elif command [0] == 'load':
