@@ -34,6 +34,7 @@ class SteelPlate(armor):
     def __init__(self):
         super().__init__("Steel Plate", defense=10)
 
+
 class Goblin(enemy):
     def __init__(self):
         super().__init__("Goblin", health=50, maxAttack=5, defense=2)
@@ -44,9 +45,10 @@ class Rat(enemy):
 class Game:
     def __init__(self):
         self.rooms = {
-            'cabin': {'description': 'A small wooden cabin with a flickering lantern.', 'exits': {'n': 'forest'}, 'items': ['map', 'cigar'], 'actions':{}, 'lightLvl': 1},
+            'cabin': {'description': 'A small wooden cabin with a flickering lantern.', 'exits': {'n': 'forest'}, 'items': ['map', 'cigar', 'new gun'], 'actions':{}, 'lightLvl': 1},
             'forest': {'description': 'A dense, dark forest. Paths lead in every direction.', 'exits': {'n': 'clearing', 'e': 'cave', 's': 'cabin', 'w': 'village outskirts' }, 'items': [], 'actions':{}, 'lightLvl': .75},
-            'village outskirts': {'description': 'You can see a nearby village roll into view just above the horizon.', 'exits': {'e': 'forest'}, 'items': [], 'actions':{}, 'lightLvl': 1},
+            'village outskirts': {'description': 'You can see a nearby village roll into view just above the horizon to the west.', 'exits': {'e': 'forest', 'w': 'villa village'}, 'items': [], 'actions':{}, 'lightLvl': 1},
+            'villa village': {'description': 'The village is rather small and the smell of bread wafts through the air.\n\nThe forest looms to the east\n\n', 'exits': {'e': 'village outskirts'}, 'items': [], 'actions':{}, 'lightLvl': 1},
             'clearing': {'description': 'A rather empty clearing in the forest. The trees are sparse with grass covering the earth. The sun shines brightly.', 'exits': {'s': 'forest'}, 'items': ['rock'], 'actions':{}, 'lightLvl': 1, "enemies": [Rat()]},
             'cave': {'description': 'A damp cave with strange markings on the walls. \n\nThe light of the forest shines from the west.\n', 'exits': {'n': 'dungeon landing', 'w': 'forest', 'e': 'shop'}, 'items': ['torch'], 'actions':{'read markings'}, 'lightLvl': .25, 'enemies': [Goblin(), Rat()]},
             'dungeon landing': {'description': 'The floor is wet beneath your feet and the walls almost seem to excrete mold. \n\nThere is a slight breeze that makes your skin crawl. \n\nThe only ways out are forward or backwards.\n', 'exits': {'s': 'cave'}, 'items': [''], 'actions':{}, 'lightLvl': .25, "enemies": [Rat()]},
@@ -59,7 +61,7 @@ class Game:
         self.hours = 6
         self.minutes = 0
         self.maxHealth = 50
-        self.health = 100
+        self.health = 50
         self.attack = 5
         self.defense = 2
 
@@ -140,7 +142,7 @@ class Game:
                 time.sleep(3)
                 target.takeDmg(burnDmg)
                 timer +=1
-                print(f"{target.name} continues to burn! Enemy health remaining: {self.curEnemy.health}")
+                print(f"{target.name} continues to burn! Enemy health remaining: {target.health}")
 
     def dealdmg(self, enemy_name):
         room_enemies = self.rooms[self.current_room].get("enemies", [])
@@ -245,13 +247,11 @@ class Game:
                         print("The torch lights up the dark surroundings.")
                         self.lightLvl = 1
                         self.holdingTorch = True
-                        print(self.lightLvl)
                     else:
                         print("You snuff out the flame of your torch onto the ground.")
                         self.lightLvl = self.rooms[self.current_room]['lightLvl']
                         self.holdingTorch = False
                         self.inventory.remove(item)
-                        print(self.lightLvl)
                 else:
                     print("Nothing happens.")
                 return
@@ -263,7 +263,7 @@ class Game:
                     self.holdingWeapon = True
                     print(f"You equipped your {item.name}!")
                 else:
-                    self.defense -= item.damage
+                    self.attack -= item.damage
                     self.curWeapon = None
                     self.holdingWeapon = False
                     print(f"You unequipped your {item.name}!")
@@ -382,18 +382,36 @@ class Game:
         else:
             print("You find nothing.")
 
+    def light(self, target):
+        if target == 'cigar':
+            print("You light the cigar. It gives off a full, earthy aroma.")
+        elif target == 'torch':
+            if not self.holdingTorch:
+                print("The torch lights up the dark surroundings.")
+                self.lightLvl = 1
+                self.holdingTorch = True
+            else:
+                print("You snuff out the flame of your torch onto the ground.")
+                self.lightLvl = self.rooms[self.current_room]['lightLvl']
+                self.holdingTorch = False
+                self.inventory.remove(target)
+        else:
+            print(f"You shouldn't light that.")
+
     #END misc Commands
 
     def run(self):
         self.show_room()
         while True:
             command = input("\n> ").lower().split()
+            args = command[1:]
             if not command:
                 continue
             if command[0] in ['n', 'e', 's', 'w']:
                 self.move(command[0])
             elif command[0] == 'take' and len(command) > 1:
-                self.take(command[1])
+                target = " ".join(args[0:])
+                self.take(target)
             elif command[0] == 'inventory':
                 self.show_inventory()
             elif command[0] == 'buy' and len(command) > 1:
@@ -435,7 +453,8 @@ class Game:
             elif command[0] == 'cast' and len(command) > 1:
                 self.cast(command[1], command[2])
             elif command[0] == 'kill' and len(command) > 1:
-                self.kill(command[1])
+                target = " ".join(args[0:])
+                self.kill(target)
             elif command [0] == 'save':
                 self.save_game()
             elif command [0] == 'load':
@@ -448,6 +467,9 @@ class Game:
                     self.rest(wait_time)
                 else:
                      print("You can't wait for a negative amount of time!")
+            elif command[0] == 'light' and len(command) > 1:
+                target = " ".join(args[0:])
+                self.light(target)
             elif command[0] == 'quit':
                 print("Thanks for playing!\n")
                 break
