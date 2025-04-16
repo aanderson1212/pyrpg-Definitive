@@ -87,10 +87,26 @@ class Game:
         self.holdingShield = False
         self.holdingWeapon = False
         self.activeCombat = False
+        self.casted = False
+        self.canCast = True
 
     #Combat
     #Deal damage to enemy in a room; NOTE: enemy cannot attack back yet.
-
+    def spellCD(self, abilityName):
+        spell = self.abilityList.get(abilityName.lower())
+        spellCD = spell['cd']
+        timer = 0
+        print("DEBUG cd function called")
+        while self.casted:
+            if timer >= spellCD:
+                self.canCast = True
+                self.casted = False
+                print("DEBUG: Spell Ready!")
+                break
+            else:
+                self.canCast = False
+                timer += 1
+                print("DEBUG: Spell waiting")
     def turnbasedCombat():
         pass
 
@@ -116,6 +132,7 @@ class Game:
                 enemy.takeDmg(damage)
                 print(f"You use {abilityName.title()} on {enemy.name} for {damage} damage!")
                 print(f"{enemy.name} has {enemy.health} health left.")
+                self.spellCD(abilityName)
                 if statuseffectChance > 6: 
                     print(f"{enemy.name}{ability['description']}")
                     self.statusEffects(ability['type'], enemy, ability['cd'])
@@ -129,9 +146,9 @@ class Game:
         print(f"No enemy named '{enemyName}' here.")
 
     def statusEffects(self, type, target, cd):
-        endChance = random.randint(1,10)
         timer = 0
         while cd:
+            endChance = random.randint(1,10)
             if timer >= cd: break
             if target.health <= 0: break
             if type == 'fire':
