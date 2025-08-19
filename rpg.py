@@ -2,6 +2,7 @@ import time
 import pickle
 import os
 import random
+import threading
 
 
 class enemy:
@@ -10,6 +11,7 @@ class enemy:
         self.health = health
         self.maxAttack = maxAttack
         self.defense = defense
+        self.attackCD = 3
 
     def takeDmg(self, dmg):
         self.health -= dmg
@@ -17,7 +19,10 @@ class enemy:
             self.health = 0
 
     def isAlive(self):
-        return self.health > 0
+        if self.health > 0:
+            return 1
+        if self.health <= 0:
+            return 0
 class weapon:
     def __init__(self, name, damage):
         self.name = name
@@ -48,7 +53,7 @@ class Game:
             'cabin': {'description': 'A small wooden cabin with a flickering lantern.', 'exits': {'n': 'forest'}, 'items': ['map', 'cigar', 'new gun'], 'actions':{}, 'lightLvl': 1},
             'forest': {'description': 'A dense, dark forest. Paths lead in every direction.', 'exits': {'n': 'clearing', 'e': 'cave', 's': 'cabin', 'w': 'village outskirts' }, 'items': [], 'actions':{}, 'lightLvl': .75},
             'village outskirts': {'description': 'You can see a nearby village roll into view just above the horizon to the west.', 'exits': {'e': 'forest', 'w': 'villa village'}, 'items': [], 'actions':{}, 'lightLvl': 1},
-            'villa village': {'description': 'The village is rather small and the smell of bread wafts through the air.\n\nThe forest looms to the east\n\n', 'exits': {'e': 'village outskirts'}, 'items': [], 'actions':{}, 'lightLvl': 1},
+            'villa village': {'description': 'The village is rather small and the smell of bread wafts through the air.\n\nThe forest looms to the east\n', 'exits': {'e': 'village outskirts'}, 'items': [], 'actions':{}, 'lightLvl': 1},
             'clearing': {'description': 'A rather empty clearing in the forest. The trees are sparse with grass covering the earth. The sun shines brightly.', 'exits': {'s': 'forest'}, 'items': ['rock'], 'actions':{}, 'lightLvl': 1, "enemies": [Rat()]},
             'cave': {'description': 'A damp cave with strange markings on the walls. \n\nThe light of the forest shines from the west.\n', 'exits': {'n': 'dungeon landing', 'w': 'forest', 'e': 'shop'}, 'items': ['torch'], 'actions':{'read markings'}, 'lightLvl': .25, 'enemies': [Goblin(), Rat()]},
             'dungeon landing': {'description': 'The floor is wet beneath your feet and the walls almost seem to excrete mold. \n\nThere is a slight breeze that makes your skin crawl. \n\nThe only ways out are forward or backwards.\n', 'exits': {'s': 'cave'}, 'items': [''], 'actions':{}, 'lightLvl': .25, "enemies": [Rat()]},
@@ -63,7 +68,10 @@ class Game:
         self.maxHealth = 50
         self.health = 50
         self.attack = 5
+        self.attackCD = 3
         self.defense = 2
+        self.crit = 2
+        self.critPercent = 1
 
         self.itemList = {
             'potion': {'item': 'potion', 'price': 5},
@@ -91,28 +99,36 @@ class Game:
         self.canCast = True
 
     #Combat
-    #Deal damage to enemy in a room; NOTE: enemy cannot attack back yet.
+    def critChance(self):
+        critChance = random.randint(1,10) - self.critPercent
+        if critChance == 0: critChance = 1
+        if critChance <= self.critPercent:
+            critDMG = self.crit
+            return critDMG
+        else: return 1
     def spellCD(self, abilityName):
-        spell = self.abilityList.get(abilityName.lower())
-        spellCD = spell['cd']
-        timer = 0
-        print("DEBUG cd function called")
-        while self.casted:
-            if timer >= spellCD:
-                self.canCast = True
-                self.casted = False
-                print("DEBUG: Spell Ready!")
-                break
-            else:
-                self.canCast = False
-                timer += 1
-                print("DEBUG: Spell waiting")
-    def turnbasedCombat():
-        pass
+        def cd_timer():
+            spell = self.abilityList.get(abilityName.lower())
+            spellCD = spell['cd']
+            timer = 0
+            while self.casted:
+                if timer >= spellCD:
+                    self.canCast = True
+                    self.casted = False
+                    timer = 0
+                    break
+                else:
+                    self.canCast = False
+                    time.sleep(1)
+                    timer += 1
+        threading.Thread(target=cd_timer, daemon=True).start()
 
     def cast(self, abilityName, enemyName):
         statuseffectChance = random.randint(1,10)
         ability = self.abilityList.get(abilityName.lower())
+        if not self.canCast: 
+            print("You cannot muster the strength.")
+            return
         if not ability:
             print(f"You don't know any ability called '{abilityName}'.")
             return
@@ -132,12 +148,12 @@ class Game:
                 enemy.takeDmg(damage)
                 print(f"You use {abilityName.title()} on {enemy.name} for {damage} damage!")
                 print(f"{enemy.name} has {enemy.health} health left.")
+                self.casted = True
                 self.spellCD(abilityName)
                 if statuseffectChance > 6: 
                     print(f"{enemy.name}{ability['description']}")
                     self.statusEffects(ability['type'], enemy, ability['cd'])
-                else:
-                    print("Not engulfed")
+
                 
                 if not enemy.isAlive():
                     print(f"You defeated the {enemy.name}!")
@@ -145,21 +161,23 @@ class Game:
                 return
         print(f"No enemy named '{enemyName}' here.")
 
-    def statusEffects(self, type, target, cd):
-        timer = 0
-        while cd:
-            endChance = random.randint(1,10)
-            if timer >= cd: break
-            if target.health <= 0: break
-            if type == 'fire':
-                burnDmg = random.randint(1,5)
-                if endChance > 7: 
-                    print("The flame fizzles out.")
-                    break
-                time.sleep(3)
-                target.takeDmg(burnDmg)
-                timer +=1
-                print(f"{target.name} continues to burn! Enemy health remaining: {target.health}")
+    def statusEffects(self, effect_type, target, cd):
+        def effect():
+            timer = 0
+            while cd:
+                if timer >= cd or target.health <= 0: break
+                endChance = random.randint(1, 10)
+                if effect_type == 'fire':
+                    burnDmg = random.randint(1, 5)
+                    if endChance > 7:
+                        print("The flame fizzles out.")
+                        break
+                    target.takeDmg(burnDmg)
+                    print(f"{target.name} continues to burn! Enemy health remaining: {target.health}\n")
+                timer += 1
+                time.sleep(2)
+
+        threading.Thread(target=effect).start()
 
     def dealdmg(self, enemy_name):
         room_enemies = self.rooms[self.current_room].get("enemies", [])
@@ -167,7 +185,7 @@ class Game:
             if enemy.name.lower() == enemy_name.lower():
                 self.curEnemy = enemy
                 if self.curEnemy.isAlive():
-                    totalDMG = self.attack - self.curEnemy.defense
+                    totalDMG = self.attack * self.critChance() - self.curEnemy.defense
                     totalDMG = max(totalDMG, 0)
                     self.curEnemy.takeDmg(totalDMG)
                     if self.curEnemy.health < 0: self.curEnemy.health = 0
@@ -181,20 +199,72 @@ class Game:
                     print("The corpse is now cold.")
                 return
         if enemy_name.startswith("Dead"):
-            print("They're already dead you nutjob.")
+            print("They're already dead, nutjob.")
         print(f"{enemy_name} is not here.")
 
-    def takeDMG(self):
+    def takeDMG(self, attackCD):
         self.activeCombat = True
-        while self.curEnemy.isAlive() and self.activeCombat and self.curEnemy in self.rooms[self.current_room]['enemies']:
-            if self.health <= 0: break
-            time.sleep(3)
-            totalDmg = self.curEnemy.maxAttack - self.defense
-            self.health -= totalDmg
-            print(f"{self.curEnemy.name} attacks you for {totalDmg}!")
-            print(f"\nYou have {self.health} health left!")
-    def kill(self, target): #continuously attack until taget is dead
-        pass
+        def dmg():
+            if self.curEnemy.health > 0 and self.activeCombat and self.curEnemy in self.rooms[self.current_room]['enemies']:
+                #if self.health <= 0: break
+                time.sleep(3)
+                totalDmg = self.curEnemy.maxAttack - self.defense
+                self.health -= totalDmg
+                print(f"\n{self.curEnemy.name} attacks you for {totalDmg}!")
+                print(f"You have {self.health} health left!\n")
+        threading.Thread(target=dmg).start()
+    def kill(self, target_name):
+        room_enemies = self.rooms[self.current_room].get("enemies", [])
+        for enemy in room_enemies:
+            if enemy.name.lower() == target_name.lower():
+                self.curEnemy = enemy
+                break
+        else:
+            print(f"No enemy named '{target_name}' here.")
+            return
+
+        def combat_loop(): #add time.sleep
+            player_cd = self.attackCD
+            enemy_cd = self.curEnemy.attackCD
+
+            player_timer = 0
+            enemy_timer = 0
+
+            while self.health > 0 and self.curEnemy.isAlive():
+                player_timer += 1
+                enemy_timer += 1
+
+                # Player's turn
+                if player_timer >= player_cd:
+                    totalDMG = self.attack * self.critChance() - self.curEnemy.defense
+                    totalDMG = max(totalDMG, 0)
+                    self.curEnemy.takeDmg(totalDMG)
+                    print(f"\nYou attack {self.curEnemy.name} for {totalDMG} damage!")
+                    print(f"{self.curEnemy.name} has {self.curEnemy.health} health left.")
+                    player_timer = 0
+                    time.sleep(1)
+                    if not self.curEnemy.isAlive():
+                        print(f"You defeated the {self.curEnemy.name}!")
+                        if not self.curEnemy.name.startswith("Dead "):
+                            self.curEnemy.name = "Dead " + self.curEnemy.name
+                        break
+
+                # Enemy's turn
+                if enemy_timer >= enemy_cd:
+                    totalDmg = self.curEnemy.maxAttack - self.defense
+                    totalDmg = max(totalDmg, 0)
+                    self.health -= totalDmg
+                    print(f"\n{self.curEnemy.name} attacks you for {totalDmg}!")
+                    print(f"You have {self.health} health left!")
+                    enemy_timer = 0
+                    time.sleep(1)
+                    if self.health <= 0:
+                        print("You died...")
+                        break
+        combat_thread = threading.Thread(target=combat_loop)
+        combat_thread.start()
+        combat_thread.join()
+
     #END combat    
     
 
@@ -297,7 +367,7 @@ class Game:
                     self.defense -= item.defense
                     self.curArmor = None
                     self.holdingShield = False
-                    print(f"You're already wearing armor.")
+                    print(f"You unequipped your {item.name}!")
                 return
         else:
             print("You don't have that item.")
@@ -416,7 +486,6 @@ class Game:
             print(f"You shouldn't light that.")
 
     #END misc Commands
-
     def run(self):
         self.show_room()
         while True:
@@ -435,7 +504,7 @@ class Game:
                 item_name = " ".join(command[1:]).lower()
                 self.buy(item_name)
             elif command[0] == 'use' and len(command) > 1:
-                item_name = " ".join(command[1:]).lower()  #join all words into the item name
+                item_name = " ".join(command[1:]).lower()  #joins all words into the item name
                 self.use(item_name)
             elif command[0] == 'wait':
                 if len(command) == 1:
@@ -499,7 +568,7 @@ class Game:
                 print("Invalid command. Type 'help' for options.")
 
     def menu(self):
-        print("Welcome to the Adventure! Type 'help' for commands at any time.\n")
+        print("Welcome! Type 'help' for commands at any time.\n")
         input('Press Enter to Begin. \n>')
         os.system('cls')
         self.run()
