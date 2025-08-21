@@ -4,6 +4,7 @@ import os
 import random
 import threading
 
+#TOADD light description option bc its annoying
 
 class enemy:
     def __init__(self, name, health, maxAttack, defense):
@@ -55,8 +56,8 @@ class Game:
             'village outskirts': {'description': 'You can see a nearby village roll into view just above the horizon to the west.', 'exits': {'e': 'forest', 'w': 'villa village'}, 'items': [], 'actions':{}, 'lightLvl': 1},
             'villa village': {'description': 'The village is rather small and the smell of bread wafts through the air.\n\nThe forest looms to the east\n', 'exits': {'e': 'village outskirts'}, 'items': [], 'actions':{}, 'lightLvl': 1},
             'clearing': {'description': 'A rather empty clearing in the forest. The trees are sparse with grass covering the earth. The sun shines brightly.', 'exits': {'s': 'forest'}, 'items': ['rock'], 'actions':{}, 'lightLvl': 1, "enemies": [Rat()]},
-            'cave': {'description': 'A damp cave with strange markings on the walls. \n\nThe light of the forest shines from the west.\n', 'exits': {'n': 'dungeon landing', 'w': 'forest', 'e': 'shop'}, 'items': ['torch'], 'actions':{'read markings'}, 'lightLvl': .25, 'enemies': [Goblin(), Rat()]},
-            'dungeon landing': {'description': 'The floor is wet beneath your feet and the walls almost seem to excrete mold. \n\nThere is a slight breeze that makes your skin crawl. \n\nThe only ways out are forward or backwards.\n', 'exits': {'s': 'cave'}, 'items': [''], 'actions':{}, 'lightLvl': .25, "enemies": [Rat()]},
+            'cave': {'description': 'A damp cave with strange markings on the walls. \n\nThe light of the forest shines from the west.', 'exits': {'n': 'dungeon landing', 'w': 'forest', 'e': 'shop'}, 'items': ['torch'], 'actions':{'read markings'}, 'lightLvl': .25, 'enemies': [Goblin(), Rat()]},
+            'dungeon landing': {'description': 'The floor is wet beneath your feet and the walls almost seem to excrete mold. \n\nThere is a slight breeze that makes your skin crawl. \n\nThe only ways out are forward or backwards.\n', 'exits': {'s': 'cave'}, 'items': [''], 'actions':{}, 'lightLvl': .50, "enemies": [Rat()]},
             'shop': {'description': 'A small shop run by a mysterious merchant.', 'exits': {'w': 'cave'}, 'items': [], 'shop': {'potion': 5, "Long Sword": 15, "Steel Plate": 10}, 'actions':{}, 'lightLvl': 1}
         }
         self.current_room = 'cabin'
@@ -72,6 +73,10 @@ class Game:
         self.defense = 2
         self.crit = 2
         self.critPercent = 1
+        self.lightdesc = " "
+
+        #SETTINGS
+        self.lightDescriptionToggle = 1
 
         self.itemList = {
             'potion': {'item': 'potion', 'price': 5},
@@ -98,6 +103,15 @@ class Game:
         self.casted = False
         self.canCast = True
 
+        self.toggle = " "
+
+    def onORoff(self, target):
+        if target == 1:
+            self.toggle = "On"
+            return True
+        if target == 0:
+            self.toggle = "Off"
+            return False
     #Combat
     def critChance(self):
         critChance = random.randint(1,10) - self.critPercent
@@ -269,12 +283,11 @@ class Game:
     
 
     #Time
-    def advance_time(self, minutes): #advance time WITHOUT regaining hp, add random enemy spawns
+    def advance_time(self, minutes): #advance time WITHOUT regaining hp
         self.minutes += minutes
         while self.minutes >= 60:
             self.minutes -= 60
             self.hours += 1
-        print(f"Current time: {self.format_time()}")
 
     def format_time(self):
         return f"{self.hours:02}:{self.minutes:02}"
@@ -285,19 +298,22 @@ class Game:
         while self.minutes >= 60:
             self.minutes -= 60
             self.hours += 1
-        print(f"Current time: {self.format_time()}")   
-        print(f"Health: {self.health}")
+        print(f"\nYou rest and gain {self.health} health.")
 
     #END Time
 
     def show_room(self):
+        self.lightDescription()
         if self.current_room == 'shop' and self.hours < 8:
             print("The shop is closed. Come back at 8:00 or later.")
             self.current_room = 'cave'
             return
         
         room = self.rooms[self.current_room]
+        print(f"\nCurrent time: {self.format_time()}")
         print(f"\n{room['description']}")
+        if self.lightDescriptionToggle == 1: print(f"{self.lightdesc}\n")
+        #if self.lightDescriptionToggle == 0: print("\n")
         print("Exits:", ", ".join(room['exits'].keys()))
         if 'shop' in room and self.hours >= 8:
             print("Shop Items:")
@@ -308,7 +324,7 @@ class Game:
             room_enemies = room['enemies']
             if room_enemies:
                 enemy_names = [enemy.name for enemy in room_enemies]
-                print(f"You also see: {', '.join(enemy_names)}.")
+                print(f"\nYou also see: {', '.join(enemy_names)}.")
             self.curEnemy = room['enemies'][0]
 
 
@@ -331,7 +347,7 @@ class Game:
                     print("You drank a potion and restored 20 HP!")
                 elif item == 'torch':
                     if not self.holdingTorch:
-                        print("The torch lights up the dark surroundings.")
+                        print("The torch lights up the area around you.")
                         self.lightLvl = 1
                         self.holdingTorch = True
                     else:
@@ -412,7 +428,60 @@ class Game:
             print("That item isn't here.")
     #END interactions
 
+    def lightDescription(self): #Returns lighting desciption based on the light level.
+        if self.lightDescriptionToggle == 0:
+            return
+
+        rlightlvl = self.rooms[self.current_room]['lightLvl']
+
+        bright_descriptions = [
+            "\nSunlight floods the area.",
+            "\nThe area is brightly lit, without a shadow in sight.",
+            "\nLight spills from all around you with a warm glow.",
+            "\nThe area around you feels bright and inviting.",
+            "\nEvery object is plainly visible, illuminated by strong lighting.",
+        ]
+
+        moderate_descriptions = [
+            "\nShadows loom in the corners, but most of the area is visible.",
+            "\nA pale light hangs in the air, leaving some details obscured.",
+            "\nFlickering light makes the space feel uncertain but not unseeable.",
+            "\nYou can make out shapes and outlines although finer details are lost in the dimness.",
+            "\nThe dim light manages to keep the shadows at bay.",
+        ]
+
+        dark_descriptions = [
+            "\nThe darkness is oppressive, swallowing up the edges of the area.",
+            "\nOnly the vaguest outlines can be seen in the murky blackness.",
+            "\nThe area is too dark to make out much detail.",
+            "\nShadows dominate the space, hiding what may lurk within.",
+            "\nIt’s pitch black. You might as well have your eyes closed.",
+        ]
+
+        if rlightlvl >= 1:
+            self.lightdesc = random.choice(bright_descriptions)
+        elif rlightlvl >= 0.5:
+            self.lightdesc = random.choice(moderate_descriptions)
+        else:
+            self.lightdesc = random.choice(dark_descriptions)
+
     #Misc Commands
+    def settings(self):
+        print("\n------ Settings ------")
+        print(f"Lighting Descriptions: {self.onORoff(self.lightDescriptionToggle)}")
+        print("--------------------\n")
+        print(f"\nTo change a setting, use: toggle <setting>")
+    def toggleSettings(self, setting):
+        if setting.lower() == "lighting desciption" or "lighting desciptions" or "lighting":
+            if self.lightDescriptionToggle == 1:
+                self.lightDescriptionToggle = 0
+                print("\nSetting Changed!")
+                return
+            if self.lightDescriptionToggle == 0:
+                self.lightDescriptionToggle = 1
+                print("\nSetting Changed!")
+                return
+
     def move(self, direction):
         if direction in self.rooms[self.current_room]['exits']:
             next_room = self.rooms[self.current_room]['exits'][direction]
@@ -487,6 +556,7 @@ class Game:
 
     #END misc Commands
     def run(self):
+        self.lightDescription()
         self.show_room()
         while True:
             command = input("\n> ").lower().split()
@@ -504,22 +574,27 @@ class Game:
                 item_name = " ".join(command[1:]).lower()
                 self.buy(item_name)
             elif command[0] == 'use' and len(command) > 1:
-                item_name = " ".join(command[1:]).lower()  #joins all words into the item name
+                item_name = " ".join(command[1:]).lower() 
                 self.use(item_name)
             elif command[0] == 'wait':
                 if len(command) == 1:
+                    print(f"You wait for 30 minutes.")
                     self.advance_time(30)
                 elif len(command) > 1:
                     try:
                         wait_time = int(command[1])
                         if wait_time > 0:
+                            print(f"You wait for: {wait_time} minutes.")
                             self.advance_time(wait_time)
                         else:
                             print("You can't wait for a negative amount of time!")
                     except ValueError:
                         print("Invalid wait time. Enter a number.")
             elif command[0] == 'look':
-                self.show_room()
+                if self.lightLvl >= .50:
+                    self.show_room()
+                else:
+                    print("It's a bit hard to see around you while in the dark.")
             elif command[0] == 'time':
                 print(f"Current time: {self.format_time()}")
             elif command[0] == 'stats':
@@ -546,7 +621,10 @@ class Game:
             elif command [0] == 'load':
                 self.load_game()
             elif command [0] == 'search':
-                self.search()
+                    if self.lightLvl >= .50:
+                        self.search()
+                    else:
+                        print("You can't make anything out in the darkness.")
             elif command[0] == 'rest' and len(command) > 1:
                 wait_time = int(command[1])
                 if wait_time > 0:
@@ -556,6 +634,11 @@ class Game:
             elif command[0] == 'light' and len(command) > 1:
                 target = " ".join(args[0:])
                 self.light(target)
+            elif command[0] == 'settings':
+                self.settings()
+            elif command[0] == 'toggle' and len(command) > 1:
+                target = " ".join(args[0:])
+                self.toggleSettings(target)
             elif command[0] == 'quit':
                 print("Thanks for playing!\n")
                 break
