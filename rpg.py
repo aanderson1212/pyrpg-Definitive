@@ -3,9 +3,10 @@ import pickle
 import os
 import random
 import threading
+from colorama import init, Fore, Back, Style
 
 #TOADD light description option bc its annoying
-
+init(autoreset=True)
 class enemy:
     def __init__(self, name, health, maxAttack, defense):
         self.name = name
@@ -51,7 +52,7 @@ class Rat(enemy):
 class Game:
     def __init__(self):
         self.rooms = {
-            'cabin': {'description': 'A small wooden cabin with a flickering lantern.', 'exits': {'n': 'forest'}, 'items': ['map', 'cigar', 'new gun'], 'actions':{}, 'lightLvl': 1},
+            'cabin': {'description': 'A small wooden cabin with a flickering lantern.', 'exits': {'n': 'forest'}, 'items': ['map', 'cigar', 'torch'], 'actions':{}, 'lightLvl': 1},
             'forest': {'description': 'A dense, dark forest. Paths lead in every direction.', 'exits': {'n': 'clearing', 'e': 'cave', 's': 'cabin', 'w': 'village outskirts' }, 'items': [], 'actions':{}, 'lightLvl': .75},
             'village outskirts': {'description': 'You can see a nearby village roll into view just above the horizon to the west.', 'exits': {'e': 'forest', 'w': 'villa village'}, 'items': [], 'actions':{}, 'lightLvl': 1},
             'villa village': {'description': 'The village is rather small and the smell of bread wafts through the air.\n\nThe forest looms to the east\n', 'exits': {'e': 'village outskirts'}, 'items': [], 'actions':{}, 'lightLvl': 1},
@@ -77,6 +78,14 @@ class Game:
 
         #SETTINGS
         self.lightDescriptionToggle = 1
+        self.favoriteColor = Fore.GREEN
+
+        #COLORS
+        self.helpHints = Fore.BLUE + Style.BRIGHT
+
+        #DEBUG
+        self.seelightlvl = 1
+        
 
         self.itemList = {
             'potion': {'item': 'potion', 'price': 5},
@@ -304,27 +313,34 @@ class Game:
 
     def show_room(self):
         self.lightDescription()
-        if self.current_room == 'shop' and self.hours < 8:
-            print("The shop is closed. Come back at 8:00 or later.")
-            self.current_room = 'cave'
-            return
+        if self.seelightlvl == 1:
+            print(self.lightLvl)
         
         room = self.rooms[self.current_room]
-        print(f"\nCurrent time: {self.format_time()}")
-        print(f"\n{room['description']}")
-        if self.lightDescriptionToggle == 1: print(f"{self.lightdesc}\n")
+        print(Back.WHITE + Fore.BLACK + f"\nCurrent time: {self.format_time()}")
+        print(Style.BRIGHT + f"\n{room['description']}")
+        lightlvl = self.rooms[self.current_room]['lightLvl']
+        if self.lightDescriptionToggle == 1: 
+            if lightlvl >= .75:
+                print(Style.BRIGHT + f"{self.lightdesc}\n")
+            if lightlvl < .75 and lightlvl >= .50:
+                print(f"{self.lightdesc}\n")
+            if lightlvl < .50:
+                print(Style.DIM + f"{self.lightdesc}\n")
+        else:
+            print("\n")
         #if self.lightDescriptionToggle == 0: print("\n")
         print("Exits:", ", ".join(room['exits'].keys()))
         if 'shop' in room and self.hours >= 8:
             print("Shop Items:")
             for item, price in room['shop'].items():
                 print(f"- {item} ({price} gold)")
-            print("Type 'buy [item]' to purchase.")
+            print(self.helpHints + "Type 'buy [item]' to purchase.")
         if 'enemies' in room:
             room_enemies = room['enemies']
             if room_enemies:
                 enemy_names = [enemy.name for enemy in room_enemies]
-                print(f"\nYou also see: {', '.join(enemy_names)}.")
+                print(Back.RED + f"\nYou also see: {', '.join(enemy_names)}.")
             self.curEnemy = room['enemies'][0]
 
 
@@ -386,7 +402,7 @@ class Game:
                     print(f"You unequipped your {item.name}!")
                 return
         else:
-            print("You don't have that item.")
+            print(self.helpHints + "You don't have that item.")
 
 
     def buy(self, item):
@@ -394,10 +410,7 @@ class Game:
         item = item.lower().replace(" ", "")  # Remove spaces and convert to lowercase
 
         if self.current_room != 'shop':
-            print("You're not in a shop.")
-            return
-        if self.hours < 8:
-            print("The shop is closed. Come back at 8:00 or later.")
+            print(self.helpHints + "You can't do that here!")
             return
         for shop_item_name in room['shop']:
             if item == shop_item_name.lower().replace(" ", ""):
@@ -467,28 +480,61 @@ class Game:
 
     #Misc Commands
     def settings(self):
-        print("\n------ Settings ------")
-        print(f"Lighting Descriptions: {self.onORoff(self.lightDescriptionToggle)}")
-        print("--------------------\n")
-        print(f"\nTo change a setting, use: toggle <setting>")
+        color = "green"
+        if self.favoriteColor == Fore.GREEN: color = "Green"
+        if self.favoriteColor == Fore.RED: color = "Red"
+        if self.favoriteColor == Fore.YELLOW: color = "Yellow"
+        if self.favoriteColor == Fore.BLUE: color = "Blue"
+        if self.favoriteColor == Fore.MAGENTA: color = "Magenta"
+        if self.favoriteColor == Fore.CYAN: color = "Cyan"
+        if self.favoriteColor == Fore.WHITE: color = "White"
+        print(self.favoriteColor + "\n------ Settings ------")
+        print(self.favoriteColor + f"Lighting Descriptions: {self.onORoff(self.lightDescriptionToggle)}" + " " +"[toggle]")
+        print(self.favoriteColor + f"Favorite Color: " + color + " " +"[set]")
+        print(self.favoriteColor + f"See Light Levels: {self.onORoff(self.seelightlvl)}" + " " +"[toggle]")
+
+        print(self.favoriteColor + "--------------------\n")
+        print(self.helpHints + f"\nTo change a setting, use: toggle <setting> or set <setting>")
     def toggleSettings(self, setting):
-        if setting.lower() == "lighting desciption" or "lighting desciptions" or "lighting":
-            if self.lightDescriptionToggle == 1:
-                self.lightDescriptionToggle = 0
-                print("\nSetting Changed!")
-                return
-            if self.lightDescriptionToggle == 0:
-                self.lightDescriptionToggle = 1
-                print("\nSetting Changed!")
-                return
+        s = setting.lower()
+        if s in ("lighting desciption", "lighting desciptions", "lighting"):
+            self.lightDescriptionToggle = 0 if self.lightDescriptionToggle == 1 else 1
+            print("\nSetting Changed!")
+            return
+
+        elif s in ("see light", "see light lvl", "lightlvl"):
+            self.seelightlvl = 0 if self.seelightlvl == 1 else 1
+            print("\nSetting Changed!")
+            return
+
+        else:
+            print("Unknown setting.")
+    def setSetting(self, setting, setTo):
+        setC = ' '
+        if setTo.lower() == "blue": setC = Fore.BLUE
+        if setTo.lower() == "white": setC = Fore.WHITE
+        if setTo.lower() == "red": setC = Fore.RED
+        if setTo.lower() == "green": setC = Fore.GREEN
+        if setTo.lower() == "yellow": setC = Fore.YELLOW
+        if setTo.lower() == "magenta": setC = Fore.MAGENTA
+        if setTo.lower() == "cyan": setC = Fore.CYAN
+        if setting.lower() == "favorite color" or "fav color" or "color":
+            self.favoriteColor = setC
+            os.system('cls')
+            self.settings()
+            return
 
     def move(self, direction):
+        os.system('cls')
         if direction in self.rooms[self.current_room]['exits']:
             next_room = self.rooms[self.current_room]['exits'][direction]
             if 'shop' in next_room and self.hours < 8:
-                print("The shop is closed. Come back at 8:00 or later.")
+                input("The shop is closed. Come back at 8:00 or later.")
+                os.system('cls')
+                self.show_room()
                 return
             self.current_room = next_room
+            self.lightLvl = self.rooms[self.current_room]['lightLvl']
             self.advance_time(10)
             self.show_room()
         else:
@@ -503,11 +549,11 @@ class Game:
 
 
     def stats(self):
-        print("------ STATS ------")
-        print(f"{'Health:':<15} {self.health:<10}")
-        print(f"{'Defense:':<15} {self.defense:<10}")
-        print(f"{'Attack:':<15} {self.attack:<10}")
-        print("--------------------")
+        print(self.favoriteColor + "------ STATS ------")
+        print(self.favoriteColor + f"{'Health:':<15} {self.health:<10}")
+        print(self.favoriteColor + f"{'Defense:':<15} {self.defense:<10}")
+        print(self.favoriteColor + f"{'Attack:':<15} {self.attack:<10}")
+        print(self.favoriteColor + "--------------------")
 
     def spellList(self):
         for spell_name, spell_info in self.abilityList.items():
@@ -520,23 +566,29 @@ class Game:
     def save_game(self, filename='savegame.pkl'):
         with open(filename, 'wb') as f:
             pickle.dump(self.__dict__, f)
-        print("Game saved successfully.")
+        print(Fore.MAGENTA + Style.BRIGHT + "Game saved successfully.")
 
     def load_game(self, filename='savegame.pkl'):
         if os.path.exists(filename):
             with open(filename, 'rb') as f:
                 self.__dict__ = pickle.load(f)
-            print("Game loaded successfully.")
+            print(Fore.GREEN + "Game loaded successfully.")
             self.show_room()
         else:
-            print("No save file found.")
+            print(Back.RED + "No save file found.")
     
     def search(self): #search the current room
         room = self.rooms[self.current_room]
-        if room.get('items'):
-            print("You find:", ", ".join(room['items']))
-        else:
-            print("You find nothing.")
+        if self.lightLvl <= .25:
+            os.system('cls')
+            input(Fore.RED + Style.DIM + Back.WHITE + "It's too dark to find anything.")
+            self.show_room()
+            return
+        if self.lightLvl > .25:
+            if room.get('items'):
+                print("You find:", ", ".join(room['items']))
+            else:
+                print(Style.DIM + "You find nothing.")
 
     def light(self, target):
         if target == 'cigar':
@@ -553,6 +605,53 @@ class Game:
                 self.inventory.remove(target)
         else:
             print(f"You shouldn't light that.")
+        
+    def help(self):
+        os.system('cls')
+        print(Fore.CYAN + Style.BRIGHT + "===== HELP LIST =====\n")
+
+        # Movement
+        print(Fore.YELLOW + "===== Movement =====")
+        print(Fore.GREEN + "n / e / s / w" + Fore.WHITE + " - Move north, east, south, or west.\n")
+
+        # Interaction
+        print(Fore.YELLOW + "===== Interaction =====")
+        print(Fore.GREEN + "look" + Fore.WHITE + " - Look around the current area.")
+        print(Fore.GREEN + "search" + Fore.WHITE + " - Search the room (requires light).")
+        print(Fore.GREEN + "take <item>" + Fore.WHITE + " - Pick up an item.")
+        print(Fore.GREEN + "read <object>" + Fore.WHITE + " - Read a book, note, or similar.")
+        print(Fore.GREEN + "use <item>" + Fore.WHITE + " - Use an item.")
+        print(Fore.GREEN + "light <item>" + Fore.WHITE + " - Light a torch, lantern, etc.")
+        print(Fore.GREEN + "attack <target>" + Fore.WHITE + " - Attack an enemy.")
+        print(Fore.GREEN + "kill <target>" + Fore.WHITE + " - Attempt to kill a target.")
+        print(Fore.GREEN + "cast <spell> <target>" + Fore.WHITE + " - Cast a spell.")
+        print(Fore.GREEN + "buy <item>" + Fore.WHITE + " - Purchase an item from a vendor.\n")
+
+        #  Time and Rest 
+        print(Fore.YELLOW + "===== Time & Rest =====")
+        print(Fore.GREEN + "wait" + Fore.WHITE + " - Wait 30 minutes.")
+        print(Fore.GREEN + "wait <minutes>" + Fore.WHITE + " - Wait a specific number of minutes.")
+        print(Fore.GREEN + "rest <minutes>" + Fore.WHITE + " - Rest to recover health/stamina.")
+        print(Fore.GREEN + "time" + Fore.WHITE + " - Show current game time.\n")
+
+        #  Player Information 
+        print(Fore.YELLOW + "===== Player Info =====")
+        print(Fore.GREEN + "inventory" + Fore.WHITE + " - Show your inventory.")
+        print(Fore.GREEN + "stats" + Fore.WHITE + " - Show character stats.")
+        print(Fore.GREEN + "spells" + Fore.WHITE + " - Show known spells.\n")
+
+        #  System / Utility 
+        print(Fore.YELLOW + "===== System / Utility =====")
+        print(Fore.GREEN + "save" + Fore.WHITE + " - Save your game.")
+        print(Fore.GREEN + "load" + Fore.WHITE + " - Load a saved game.")
+        print(Fore.GREEN + "clear" + Fore.WHITE + " - Clear the screen and reprint the room.")
+        print(Fore.GREEN + "settings" + Fore.WHITE + " - Open settings menu.")
+        print(Fore.GREEN + "toggle <setting>" + Fore.WHITE + " - Toggle a setting on/off.")
+        print(Fore.GREEN + "set <setting> <value>" + Fore.WHITE + " - Change a setting value.")
+        print(Fore.GREEN + "quit" + Fore.WHITE + " - Exit the game.\n\n\n")
+
+        print(Fore.MAGENTA + "And don't forget..")
+        print(Fore.BLUE + Style.BRIGHT + "Hints are always blue!")
 
     #END misc Commands
     def run(self):
@@ -621,7 +720,7 @@ class Game:
             elif command [0] == 'load':
                 self.load_game()
             elif command [0] == 'search':
-                    if self.lightLvl >= .50:
+                    if self.lightLvl > 0:
                         self.search()
                     else:
                         print("You can't make anything out in the darkness.")
@@ -639,6 +738,8 @@ class Game:
             elif command[0] == 'toggle' and len(command) > 1:
                 target = " ".join(args[0:])
                 self.toggleSettings(target)
+            elif command[0] == 'set' and len(command) > 1:
+                self.setSetting(command[1], command[2])
             elif command[0] == 'quit':
                 print("Thanks for playing!\n")
                 break
@@ -646,11 +747,13 @@ class Game:
                 os.system('cls')
                 self.show_room()
             elif command[0] == 'help':
-                print("This is an unhelpful list!")
+                self.help()
             else:
                 print("Invalid command. Type 'help' for options.")
 
     def menu(self):
+        print(Fore.RED + "Welcome!\n")
+        print(self.helpHints +  Style.BRIGHT + "Welcome!\n")
         print("Welcome! Type 'help' for commands at any time.\n")
         input('Press Enter to Begin. \n>')
         os.system('cls')
